@@ -1,5 +1,6 @@
 import { isQoderComposerReady } from './qoder-terminal-readiness'
 import { memoizeTitleClassification } from '../../shared/terminal-title-classification-memo'
+import { getPiStateTitleStatus } from '../../shared/pi-state-title-marker'
 import {
   detectAgentStatusFromTitle,
   isOpenCodeNativeTitle,
@@ -20,7 +21,6 @@ import { startOfLastLines, startOfLastNonBlankLines } from './terminal-wait-tail
 const EXPLICIT_IDLE_TITLE_RE = /(^|\s)(ready|idle|done)(\s|$|[.!?])/i
 const CLAUDE_IDLE_PREFIX = '\u2733'
 const GEMINI_IDLE_PREFIX = '\u25c7'
-const PI_IDLE_PREFIX = '\u03c0 - '
 
 function computeExplicitIdleStatusFromTitle(title: string): AgentStatus | null {
   const status = detectAgentStatusFromTitle(title)
@@ -35,7 +35,8 @@ function computeExplicitIdleStatusFromTitle(title: string): AgentStatus | null {
     title.startsWith(CLAUDE_IDLE_PREFIX) ||
     title.startsWith('* ') ||
     title.includes(GEMINI_IDLE_PREFIX) ||
-    title.startsWith(PI_IDLE_PREFIX)
+    getPiStateTitleStatus(title) === 'idle' ||
+    title.startsWith('\u03c0 - ')
   ) {
     return 'idle'
   }

@@ -61,6 +61,34 @@ Three consequences:
   decay, acknowledgements, dismissals, unread. Those stay reader-side but
   become one shared implementation (PR 3).
 
+## Managed OMP hook status
+
+The managed extension sends OMP events to `/hook/omp` on the execution host.
+`normalizePiCompatibleEvent` maps them into the existing hook status store.
+Native, WSL, SSH, and folder workspaces use the same mapping.
+No second reporter or reader-side rule is required.
+
+- Startup and session switches send current activity. Readiness requires idle,
+  no pending messages, and no active jobs. Missing activity does not prove readiness.
+- Idle readiness uses `done` with `sessionBoundary: true`. It is not turn completion.
+- Retry and compaction start as `working`. Their end can restore readiness only
+  when current activity is clear and no continuation flag is true.
+- Real UI dialogs use `waiting`; tool approvals use `blocked`. Closing a dialog
+  restores current activity. Nested dialogs, reloads, and stale closes are tracked.
+- `agent_end` with `willContinue: true` does not complete a turn. Owned jobs,
+  children, and pending messages keep the combined row `working` after the main
+  agent completes. The final all-clear keeps the main-agent outcome and its clock.
+- The last assistant stop reason maps `stop` to `success`, `error` to `failure`,
+  and `aborted` to `cancellation`. Other reasons have no outcome. Normal provider
+  completion does not prove that the user's task succeeded.
+- Shutdown clears local timers and dialog tracking without a completion event.
+  Missing hooks or transport loss never prove process exit. Process verdicts
+  remain `live`, `unverifiable`, and `exited`.
+
+Activity and outcome fields are optional payload fields. Existing remote clients
+do not need a new wire opcode. A source change does not update an installed app
+or its managed extension until that source is built and deployed.
+
 ## The store already exists
 
 The hook server's state is that store today for every PTY-based agent. The
