@@ -84,6 +84,11 @@ No second reporter or reader-side rule is required.
 - Shutdown clears local timers and dialog tracking without a completion event.
   Missing hooks or transport loss never prove process exit. Process verdicts
   remain `live`, `unverifiable`, and `exited`.
+- Timer-cleared working titles do not prove readiness. Their origin survives
+  graph rebuilds and same-title hydration. Genuine idle titles remain valid evidence.
+- A fresh working hook prevents a retained prompt from proving readiness.
+- Selected-target sends recognize current Pi and OMP idle state markers,
+  including wrapped titles, and keep support for the legacy idle title.
 
 Activity and outcome fields are optional payload fields. Existing remote clients
 do not need a new wire opcode. A source change does not update an installed app
