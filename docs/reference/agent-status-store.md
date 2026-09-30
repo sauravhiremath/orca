@@ -71,6 +71,8 @@ No second reporter or reader-side rule is required.
 - Startup and session switches send current activity. Readiness requires idle,
   no pending messages, and no active jobs. Missing activity does not prove readiness.
 - Idle readiness uses `done` with `sessionBoundary: true`. It is not turn completion.
+  This also applies after a completed turn: retry, compaction, dialog close, and
+  approval resolution keep the prior main-agent outcome without another completion.
 - Retry and compaction start as `working`. Their end can restore readiness only
   when current activity is clear and no continuation flag is true.
 - Real UI dialogs use `waiting`; tool approvals use `blocked`. Closing a dialog

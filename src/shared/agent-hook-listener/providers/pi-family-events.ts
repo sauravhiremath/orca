@@ -155,8 +155,7 @@ export function normalizePiCompatibleEvent(
           }
         : previousMain
       : undefined
-  const idleBoundary =
-    isOmp && stateName === 'done' && eventName !== 'agent_end' && mainAgent?.state !== 'done'
+  const idleBoundary = isOmp && stateName === 'done' && eventName !== 'agent_end'
   return normalizeAgentStatusPayload({
     state: stateName,
     prompt: resolvePrompt(state, paneKey, promptText, {
