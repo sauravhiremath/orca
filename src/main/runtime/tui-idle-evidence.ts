@@ -37,14 +37,11 @@ export function hasExplicitIdleTitle(
   record: TuiIdleEvidenceRecord,
   rendererTitle?: string | null
 ): boolean {
-  // Why lastOscTitle too, not just the renderer's pane title: a daemon-hosted or
-  // background pane has no renderer publishing a title, so reading only the synced
-  // one dropped an explicit `Codex ready` to the tier-3 lane and delayed it by the
-  // whole quiescence window.
+  if (record.lastOscTitleStaleWorkingClear) {
+    return false
+  }
+  // Headless panes retain idle title evidence without a renderer title.
   for (const title of [rendererTitle, record.lastOscTitle]) {
-    if (record.lastOscTitleStaleWorkingClear && title === record.lastOscTitle) {
-      continue
-    }
     if (title && detectExplicitIdleStatusFromTitle(title) === 'idle') {
       return true
     }

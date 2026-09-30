@@ -111,20 +111,25 @@ describe('evaluateTuiIdle ranking', () => {
     expect(verdict).toEqual({ kind: 'ready-strong' })
   })
 
-  it('rejects a timer-cleared idle title while the OMP hook still reports working', () => {
-    const verdict = evaluateTuiIdle(
-      input({
+  it.each([undefined, 'π > project', 'OMP > project'])(
+    'rejects timer-cleared title evidence with renderer title %s until genuine idle arrives',
+    (rendererTitle) => {
+      const evidence = input({
         ...noMuse,
         agent: 'omp',
-        record: {
-          ...record({ lastAgentStatus: 'idle', lastOscTitle: 'π > project' }),
+        record: record({
+          lastAgentStatus: 'idle',
+          lastOscTitle: 'π > project',
           lastOscTitleStaleWorkingClear: true
-        },
+        }),
+        rendererTitle,
         firstPartyStatus: { state: 'working', updatedAt: Date.now() }
       })
-    )
-    expect(verdict).toEqual({ kind: 'working' })
-  })
+      expect(evaluateTuiIdle(evidence)).toEqual({ kind: 'working' })
+      evidence.record.lastOscTitleStaleWorkingClear = false
+      expect(evaluateTuiIdle(evidence)).toEqual({ kind: 'ready-strong' })
+    }
+  )
 
   it('does not let an old prompt bypass a fresh working hook', () => {
     expect(

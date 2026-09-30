@@ -87,7 +87,9 @@ No second reporter or reader-side rule is required.
   Missing hooks or transport loss never prove process exit. Process verdicts
   remain `live`, `unverifiable`, and `exited`.
 - Timer-cleared working titles do not prove readiness. Their origin survives
-  graph rebuilds and same-title hydration. Genuine idle titles remain valid evidence.
+  graph rebuilds and same-title hydration. While the stale-clear flag is set,
+  neither the OSC title nor the renderer title proves idle, even after rebranding.
+  A genuine OSC title clears the flag and restores idle-title evidence.
 - A fresh working hook prevents a retained prompt from proving readiness.
 - Selected-target sends recognize current Pi and OMP idle state markers,
   including wrapped titles, and keep support for the legacy idle title.
