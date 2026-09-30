@@ -78,6 +78,8 @@ No second reporter or reader-side rule is required.
 - `agent_end` with `willContinue: true` does not complete a turn. Owned jobs,
   children, and pending messages keep the combined row `working` after the main
   agent completes. The final all-clear keeps the main-agent outcome and its clock.
+- OMP keeps checking owned jobs and pending messages after `agent_settled` until
+  they clear. Pi still uses `agent_settled` instead of its idle fallback check.
 - The last assistant stop reason maps `stop` to `success`, `error` to `failure`,
   and `aborted` to `cancellation`. Other reasons have no outcome. Normal provider
   completion does not prove that the user's task succeeded.

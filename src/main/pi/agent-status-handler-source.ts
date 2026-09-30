@@ -266,7 +266,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     '  function checkPendingAgentEnd(): void {',
     '    pendingAgentEndCheck = null',
     '    const ctx = pendingAgentEndContext',
-    '    if (!ctx || agentSettledSupported || completionPostedGeneration === endedRunGeneration) {',
+    '    if (!ctx || (agentSettledSupported && !isOmpRuntime()) || completionPostedGeneration === endedRunGeneration) {',
     '      pendingAgentEndContext = null',
     '      return',
     '    }',

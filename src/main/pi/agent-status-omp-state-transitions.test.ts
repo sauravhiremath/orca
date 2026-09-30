@@ -89,7 +89,7 @@ describe('managed OMP status transitions', () => {
     }
   )
 
-  it('keeps combined work active until pending messages clear', async () => {
+  it.each([false, true])('keeps pending messages active with settled event %s', async (settled) => {
     const { harness, rows } = createStatusScenario()
     let pending = true
     const context = { ...idle, hasPendingMessages: () => pending }
@@ -102,6 +102,11 @@ describe('managed OMP status transitions', () => {
     await vi.waitFor(() =>
       expect(rows.at(-1)).toMatchObject({ state: 'working', mainAgent: { outcome: 'success' } })
     )
+    if (settled) {
+      await harness.callHook('agent_settled', {}, context)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(rows.at(-1)?.state).toBe('working')
     pending = false
     await vi.waitFor(() =>
       expect(rows.at(-1)).toMatchObject({ state: 'done', mainAgent: { outcome: 'success' } })
@@ -145,27 +150,35 @@ describe('managed OMP status transitions', () => {
     }
   )
 
-  it('keeps combined work active while jobs run and preserves the main-agent outcome clock', async () => {
-    const { harness, rows } = createStatusScenario()
-    let running = true
-    const context = { ...idle, getAsyncJobSnapshot: () => ({ running: running ? [{}] : [] }) }
-    await harness.callHook('agent_start', {}, context)
-    await harness.callHook(
-      'agent_end',
-      { messages: [{ role: 'assistant', stopReason: 'error' }] },
-      context
-    )
-    await vi.waitFor(() =>
-      expect(rows.at(-1)).toMatchObject({
-        state: 'working',
-        mainAgent: { state: 'done', outcome: 'failure' }
-      })
-    )
-    const clock = rows.at(-1)?.mainAgent?.stateStartedAt
-    running = false
-    await vi.waitFor(() => expect(rows.at(-1)?.state).toBe('done'))
-    expect(rows.at(-1)?.mainAgent).toMatchObject({ outcome: 'failure', stateStartedAt: clock })
-  })
+  it.each([false, true])(
+    'preserves the job outcome clock with settled event %s',
+    async (settled) => {
+      const { harness, rows } = createStatusScenario()
+      let running = true
+      const context = { ...idle, getAsyncJobSnapshot: () => ({ running: running ? [{}] : [] }) }
+      await harness.callHook('agent_start', {}, context)
+      await harness.callHook(
+        'agent_end',
+        { messages: [{ role: 'assistant', stopReason: 'error' }] },
+        context
+      )
+      await vi.waitFor(() =>
+        expect(rows.at(-1)).toMatchObject({
+          state: 'working',
+          mainAgent: { state: 'done', outcome: 'failure' }
+        })
+      )
+      const clock = rows.at(-1)?.mainAgent?.stateStartedAt
+      if (settled) {
+        await harness.callHook('agent_settled', {}, context)
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(rows.at(-1)?.state).toBe('working')
+      running = false
+      await vi.waitFor(() => expect(rows.at(-1)?.state).toBe('done'))
+      expect(rows.at(-1)?.mainAgent).toMatchObject({ outcome: 'failure', stateStartedAt: clock })
+    }
+  )
 
   it('restores readiness after nested dialogs and ignores a late close from an old session', async () => {
     const { harness, rows } = createStatusScenario()
