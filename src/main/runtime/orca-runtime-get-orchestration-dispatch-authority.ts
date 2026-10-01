@@ -2,6 +2,7 @@
 import { OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller } from './orca-runtime-verify-orchestration-compatibility-caller'
 import type { OrchestrationCompatibilityTerminalAuthority } from './runtime-terminal-contracts'
 import { createHash } from 'node:crypto'
+import { isShellProcess } from '../../shared/shell-process-detection'
 import {
   isTerminalLeafId,
   makePaneKey,
@@ -123,6 +124,43 @@ export class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends OrcaRuntim
         : null,
       hostScope
     }
+  }
+
+  protected async retirePtyAgentLaunchAuthorityAfterCommandFinished(ptyId: string): Promise<void> {
+    const pty = this.ptysById.get(ptyId)
+    if (!pty?.connected) {
+      return
+    }
+    const receipt = this.restoredOrchestrationAuthorityByPtyId.get(ptyId)
+    const launchToken = pty.launchToken
+    const launchAgent = pty.launchAgent
+    if (!launchToken && !receipt && !launchAgent) {
+      return
+    }
+    const incarnationId = pty.incarnationId
+    const generation = this.getPtyLifecycleGeneration(ptyId)
+    const result = await this.readPtyForegroundProcessFromController(ptyId, pty.lastOscTitleAt ?? 0)
+    // OMP emits command-finished markers during live TUI redraws, not only on process exit.
+    if (
+      !result?.available ||
+      result.controller !== this.ptyController ||
+      !result.process ||
+      !isShellProcess(result.process)
+    ) {
+      return
+    }
+    if (
+      this.ptysById.get(ptyId) !== pty ||
+      !pty.connected ||
+      pty.incarnationId !== incarnationId ||
+      this.getPtyLifecycleGeneration(ptyId) !== generation ||
+      pty.launchToken !== launchToken ||
+      pty.launchAgent !== launchAgent ||
+      this.restoredOrchestrationAuthorityByPtyId.get(ptyId) !== receipt
+    ) {
+      return
+    }
+    this.retirePtyAgentLaunchAuthority(ptyId)
   }
 
   protected retirePtyAgentLaunchAuthority(ptyId: string): void {

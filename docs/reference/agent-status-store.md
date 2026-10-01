@@ -88,6 +88,13 @@ No second reporter or reader-side rule is required.
 - Shutdown clears local timers and dialog tracking without a completion event.
   Missing hooks or transport loss never prove process exit. Process verdicts
   remain `live`, `unverifiable`, and `exited`.
+- OMP redraws can emit `OSC 133;D` while its process still runs. Neither parsed
+  bytes nor daemon command-finished facts retire launch authority on their own.
+  Retirement requires a shell confirmed by the current execution host. Unknown,
+  failed, and non-shell foreground reads keep the row and admit later hooks.
+  Pending reads must still match the controller, PTY incarnation, lifecycle,
+  launch identity, and restored inventory receipt. Actual PTY exit keeps its
+  existing retirement rules.
 - Timer-cleared working titles do not prove readiness. Their origin survives
   graph rebuilds and same-title hydration. While the stale-clear flag is set,
   neither the OSC title nor the renderer title proves idle, even after rebranding.
