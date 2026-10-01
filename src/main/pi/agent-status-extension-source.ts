@@ -206,7 +206,7 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     '  const ompRuntime = isOmpRuntime()',
     '  cancelPostRetry()',
     '  const metadata = getPostSessionMetadata(ompRuntime)',
-    '// Model changes must not erase an unacknowledged completion in the latest-only slot.',
+    '  // Model and dialog events must not replace an undelivered completion.',
     "  const previousCompletion = latestPost?.hookEventName === 'agent_end' && !latestPost.delivered && latestPost.metadata.session_id === metadata.session_id",
     "  const preserveCompletion = ompRuntime && previousCompletion && ['model_select', 'ui_prompt_start', 'ui_prompt_end'].includes(hookEventName)",
     '  pendingPost = {',

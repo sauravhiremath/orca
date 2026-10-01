@@ -73,6 +73,8 @@ No second reporter or reader-side rule is required.
 - Idle readiness uses `done` with `sessionBoundary: true`. It is not turn completion.
   This also applies after a completed turn: retry, compaction, dialog close, and
   approval resolution keep the prior main-agent outcome without another completion.
+  Native chat keeps the completed main-agent duration when its host turn stamp
+  remains present; a readiness-only row without that clock has no turn duration.
 - Retry and compaction start as `working`. Their end can restore readiness only
   when current activity is clear and no continuation flag is true.
 - Real UI dialogs use `waiting`; tool approvals use `blocked`. Closing a dialog
@@ -95,6 +97,14 @@ No second reporter or reader-side rule is required.
   Pending reads must still match the controller, PTY incarnation, lifecycle,
   launch identity, and restored inventory receipt. Actual PTY exit keeps its
   existing retirement rules.
+- Renderer command-finished cleanup also requires a confirmed shell for a known
+  agent. An unanswered or failed read cancels pending cleanup without dropping the
+  status or launch record, even when the host has no checkable process identity.
+  A known `done` hook row still requires confirmation: turn completion is not
+  process exit. Repeated command-finished markers do not change this rule.
+- Parked SSH command-finished markers do not drop hook status or launch records.
+  They carry no execution-host process-exit proof. Host-proved process exit and
+  explicit user dismissal keep their existing cleanup rules.
 - Timer-cleared working titles do not prove readiness. Their origin survives
   graph rebuilds and same-title hydration. While the stale-clear flag is set,
   neither the OSC title nor the renderer title proves idle, even after rebranding.
