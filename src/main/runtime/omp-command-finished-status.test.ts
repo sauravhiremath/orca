@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer } from '../agent-hooks/server'
 import { OrcaRuntimeService } from './orca-runtime'
 import { makeStore } from './runtime-rpc-worktree-store-fixtures'
@@ -44,6 +44,7 @@ const servers: AgentHookServer[] = []
 const directories: string[] = []
 
 afterEach(() => {
+  vi.restoreAllMocks()
   for (const server of servers.splice(0)) {
     server.stop()
   }
@@ -103,6 +104,9 @@ async function createPane(getForegroundProcess: () => Promise<string | null>) {
     undefined,
     {
       retireAgentHookCompatibilityAuthority: (paneKey) => server.retirePaneAuthority(paneKey),
+      getAgentStatusSnapshot: () => server.getStatusSnapshot(),
+      getAgentProviderSessionSnapshot: () => server.getStatusSnapshot(),
+      getAgentProviderSessionRowsForPane: (paneKey) => server.getStatusSnapshotForPane(paneKey),
       attestAgentHookCompatibilityAuthority: (candidate) =>
         server.attestCompatibilityAuthority(candidate)
     }
@@ -226,6 +230,49 @@ for (const path of ['bytes', 'daemon'] as const) {
       commandFinished(pane.runtime)
       await settle()
       expect(pane.state()).toBe('done')
+    })
+
+    it.each([
+      ['new session', 'new-session', true],
+      ['new turn in the same session', 'old-session', true],
+      ['fresh activity without a state change', 'old-session', false]
+    ] as const)('ignores an old shell read after %s', async (_label, sessionId, completeTurn) => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000)
+      let releaseForeground: ((process: string | null) => void) | undefined
+      let markReadStarted: (() => void) | undefined
+      const readStarted = new Promise<void>((resolve) => {
+        markReadStarted = resolve
+      })
+      const foreground = new Promise<string | null>((resolve) => {
+        releaseForeground = resolve
+      })
+      const pane = await createPane(() => {
+        markReadStarted?.()
+        return foreground
+      })
+      await pane.post({ hook_event_name: 'before_agent_start', session_id: 'old-session' })
+      if (completeTurn) {
+        await pane.post({ hook_event_name: 'agent_end', session_id: 'old-session' })
+      }
+      commandFinished(pane.runtime)
+      await readStarted
+      commandFinished(pane.runtime)
+      await pane.post({ hook_event_name: 'before_agent_start', session_id: sessionId })
+      releaseForeground?.('zsh')
+      await settle()
+      expect(pane.state()).toBe('working')
+      expect(pane.server.getStatusSnapshotForPane(pane.paneKey)[0]?.providerSession?.id).toBe(
+        sessionId
+      )
+      expect(
+        pane.runtime.getOrchestrationDispatchAuthority(pane.handle)?.launchTokenHash
+      ).not.toBeNull()
+      commandFinished(pane.runtime)
+      await settle()
+      expect(pane.state()).toBeUndefined()
+      expect(
+        pane.runtime.getOrchestrationDispatchAuthority(pane.handle)?.launchTokenHash
+      ).toBeNull()
     })
 
     it('retires authority only when the execution host confirms a shell', async () => {

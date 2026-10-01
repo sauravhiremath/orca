@@ -95,8 +95,15 @@ No second reporter or reader-side rule is required.
   Retirement requires a shell confirmed by the current execution host. Unknown,
   failed, and non-shell foreground reads keep the row and admit later hooks.
   Pending reads must still match the controller, PTY incarnation, lifecycle,
-  launch identity, and restored inventory receipt. Actual PTY exit keeps its
-  existing retirement rules.
+  launch identity, restored inventory receipt, and host hook observations.
+  A new session, turn, or observation revision cancels an older shell response,
+  including activity with the same state and timestamp. Actual PTY exit keeps
+  its existing retirement rules.
+- A command-finished marker ends token-only startup takeover permission before
+  the foreground read starts. Unknown, failed, and non-shell reads still retain
+  status and the launch token, but takeover requires matching host hook
+  attestation afterward. Registering the same launch does not restore startup
+  permission. Admitting a fresh launch token restores the startup exception.
 - Renderer command-finished cleanup also requires a confirmed shell for a known
   agent. An unanswered or failed read cancels pending cleanup without dropping the
   status or launch record, even when the host has no checkable process identity.

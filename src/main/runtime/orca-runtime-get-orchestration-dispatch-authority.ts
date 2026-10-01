@@ -24,6 +24,7 @@ import type { FleetAgentStatusEvidence } from '../../shared/orchestration-fleet-
 import { readOrchestrationFleetAgentStatusSnapshot } from './orchestration-fleet-agent-status-snapshot'
 import { resolveStructuredWorkerAuthority } from './structured-worker-authority'
 import { matchesProcessIncarnation } from './orchestration/worker-terminal-process-liveness'
+import { captureAgentHookRetirementFence } from './runtime-agent-hook-retirement-fence'
 
 export class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller {
   /** Every pane key this PTY could be addressed by, including restored receipts. */
@@ -131,6 +132,7 @@ export class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends OrcaRuntim
     if (!pty?.connected) {
       return
     }
+    pty.launchNeedsHookAttestation = true
     const receipt = this.restoredOrchestrationAuthorityByPtyId.get(ptyId)
     const launchToken = pty.launchToken
     const launchAgent = pty.launchAgent
@@ -139,6 +141,11 @@ export class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends OrcaRuntim
     }
     const incarnationId = pty.incarnationId
     const generation = this.getPtyLifecycleGeneration(ptyId)
+    const hookObservationsUnchanged = captureAgentHookRetirementFence(
+      this.collectPaneKeysForPty(ptyId),
+      this.getAgentProviderSessionRowsForPaneFn,
+      this.getAgentProviderSessionSnapshotFn ?? this.getAgentStatusSnapshotFn
+    )
     const result = await this.readPtyForegroundProcessFromController(ptyId, pty.lastOscTitleAt ?? 0)
     // OMP emits command-finished markers during live TUI redraws, not only on process exit.
     if (
@@ -158,6 +165,9 @@ export class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends OrcaRuntim
       pty.launchAgent !== launchAgent ||
       this.restoredOrchestrationAuthorityByPtyId.get(ptyId) !== receipt
     ) {
+      return
+    }
+    if (!hookObservationsUnchanged()) {
       return
     }
     this.retirePtyAgentLaunchAuthority(ptyId)
