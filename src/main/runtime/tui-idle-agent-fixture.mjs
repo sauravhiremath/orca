@@ -16,7 +16,7 @@ const streaming = setInterval(() => {
       process.stdout.write(osc('Codex ready'))
     }
     if (mode === 'omp-stale') {
-      process.stdout.write(osc('π > project'))
+      process.stdout.write(osc('π - project'))
     }
     return
   }

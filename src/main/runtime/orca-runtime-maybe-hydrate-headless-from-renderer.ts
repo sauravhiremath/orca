@@ -127,6 +127,8 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
     // once a live title was observed, so live state always wins.
     this.getOrCreatePtyTitleTrackerEntry(ptyId).tracker.seedInitialTitle(title)
     const status = detectAgentStatusFromTitle(title)
+    // Why evidence, not display: display readers project a stale-working clear over the record,
+    // so re-seeding the native working title cannot bring a cleared spinner back.
     // Why: live observations store normalized titles, so seeds must match —
     // otherwise the first live frame after hydration compares unequal and
     // touches session tabs once for no visible change.
@@ -134,8 +136,6 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
     const pty = this.ptysById.get(ptyId)
     if (pty) {
       const observedAt = this.nextTitleObservationSequence()
-      pty.lastOscTitleStaleWorkingClear =
-        pty.lastOscTitle === seededTitle && pty.lastOscTitleStaleWorkingClear === true
       pty.lastOscTitle = seededTitle
       pty.lastOscTitleAt = observedAt
       this.setPtyManagementTitleFromObservedTitle(pty, seededTitle, observedAt)
@@ -144,8 +144,6 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
       // Why: seed lastOscTitle even when the seeded title doesn't classify
       // as an agent state, so worktree.ps recomputes status from the live
       // title rather than treating the leaf as agentless.
-      leaf.lastOscTitleStaleWorkingClear =
-        leaf.lastOscTitle === seededTitle && leaf.lastOscTitleStaleWorkingClear === true
       leaf.lastOscTitle = seededTitle
       leaf.lastOscTitleAt = this.nextTitleObservationSequence()
       if (status !== null) {

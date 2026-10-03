@@ -36,6 +36,8 @@ function input(overrides: Partial<TuiIdleEvaluationInput> = {}): TuiIdleEvaluati
     readPositiveBodyEvidence: () => false,
     readQuietReadyBodyEvidence: () => true,
     readAgentRuleVerdict: () => null,
+    readScreenInputVeto: () => null,
+    titleObservedAtEpochMs: null,
     agent: 'muse',
     firstPartyStatus: null,
     quiescenceMs: QUIESCENCE_MS,
@@ -116,26 +118,6 @@ describe('evaluateTuiIdle ranking', () => {
     expect(verdict).toEqual({ kind: 'ready-strong' })
   })
 
-  it.each([undefined, 'π > project', 'OMP > project'])(
-    'rejects timer-cleared title evidence with renderer title %s until genuine idle arrives',
-    (rendererTitle) => {
-      const evidence = input({
-        ...noMuse,
-        agent: 'omp',
-        record: record({
-          lastAgentStatus: 'idle',
-          lastOscTitle: 'π > project',
-          lastOscTitleStaleWorkingClear: true
-        }),
-        rendererTitle,
-        firstPartyStatus: { state: 'working', updatedAt: Date.now() }
-      })
-      expect(evaluateTuiIdle(evidence)).toEqual({ kind: 'working' })
-      evidence.record.lastOscTitleStaleWorkingClear = false
-      expect(evaluateTuiIdle(evidence)).toEqual({ kind: 'ready-strong' })
-    }
-  )
-
   it('does not let an old prompt bypass a fresh working hook', () => {
     expect(
       evaluateTuiIdle(
@@ -147,19 +129,6 @@ describe('evaluateTuiIdle ranking', () => {
         })
       )
     ).toEqual({ kind: 'working' })
-  })
-
-  it('accepts a genuine OMP idle title despite a retained working hook', () => {
-    expect(
-      evaluateTuiIdle(
-        input({
-          ...noMuse,
-          agent: 'omp',
-          record: record({ lastAgentStatus: 'idle', lastOscTitle: 'π > project' }),
-          firstPartyStatus: { state: 'working', updatedAt: Date.now() }
-        })
-      )
-    ).toEqual({ kind: 'ready-strong' })
   })
 
   it('calls a name-only title weak, even for an agent it is the only rest signal of', () => {
@@ -321,6 +290,8 @@ describe('a DSH pane settles tui-idle on its own hook', () => {
     readPositiveBodyEvidence: () => false,
     readQuietReadyBodyEvidence: () => false,
     readAgentRuleVerdict: () => null,
+    readScreenInputVeto: () => null,
+    titleObservedAtEpochMs: null,
     readTailBlockedReason: () => null,
     agent: 'dsh' as const,
     firstPartyStatus: { state: 'done' as const, updatedAt: Date.now() },
@@ -350,5 +321,63 @@ describe('a DSH pane settles tui-idle on its own hook', () => {
   it('leaves other agents on the title lanes', () => {
     // Scoped on purpose: an agent whose hooks report child turns can emit `done` mid-turn.
     expect(ready({ agent: 'claude' })).toBe(false)
+  })
+})
+
+describe('evaluateTuiIdle screen input veto', () => {
+  const omp = (overrides: Partial<TuiIdleEvaluationInput> = {}) =>
+    input({ agent: 'omp', readQuietReadyBodyEvidence: () => false, ...overrides })
+
+  it('refuses every ready lane while the screen vetoes input', () => {
+    const lanes: Partial<TuiIdleEvaluationInput>[] = [
+      { record: record({ lastOscTitle: 'π - repo', lastAgentStatus: 'idle' }) },
+      { readPositiveBodyEvidence: () => true },
+      { firstPartyStatus: { state: 'done', updatedAt: Date.now(), sessionBoundary: true } },
+      { record: record({ lastOscTitle: 'OMP', lastAgentStatus: 'idle' }) }
+    ]
+    for (const lane of lanes) {
+      expect(isTuiIdleReadyVerdict(evaluateTuiIdle(omp(lane)))).toBe(true)
+      expect(evaluateTuiIdle(omp({ ...lane, readScreenInputVeto: () => true }))).toEqual({
+        kind: 'pending',
+        quietForeground: 'closed'
+      })
+    }
+  })
+
+  it("accepts OMP's own idle title once it has stood on a screen read clear of the wizard", () => {
+    const idle = {
+      record: record({
+        lastOscTitle: 'π > repo',
+        lastAgentStatus: 'idle',
+        lastOutputAt: Date.now()
+      }),
+      titleObservedAtEpochMs: Date.now() - QUIESCENCE_MS
+    }
+    // Output still flowing (OMP's bracketed-paste keepalive) does not hold the title back.
+    expect(evaluateTuiIdle(omp({ ...idle, readScreenInputVeto: () => false }))).toEqual({
+      kind: 'ready-strong'
+    })
+    for (const unproven of [
+      { readScreenInputVeto: () => null },
+      { readScreenInputVeto: () => true },
+      {
+        titleObservedAtEpochMs: Date.now() - QUIESCENCE_MS + 1_000,
+        readScreenInputVeto: () => false
+      },
+      { titleObservedAtEpochMs: null, readScreenInputVeto: () => false }
+    ]) {
+      expect(isTuiIdleReadyVerdict(evaluateTuiIdle(omp({ ...idle, ...unproven })))).toBe(false)
+    }
+  })
+
+  it('keeps an OMP pane waiting on the user pending, so the poll still reads its screen', () => {
+    expect(
+      evaluateTuiIdle(
+        omp({
+          record: record({ lastOscTitle: 'OMP', lastAgentStatus: 'idle' }),
+          firstPartyStatus: { state: 'blocked', updatedAt: Date.now() }
+        })
+      )
+    ).toEqual({ kind: 'pending', quietForeground: 'closed' })
   })
 })

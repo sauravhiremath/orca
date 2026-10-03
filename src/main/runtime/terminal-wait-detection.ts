@@ -1,6 +1,5 @@
 import { isQoderComposerReady } from './qoder-terminal-readiness'
 import { memoizeTitleClassification } from '../../shared/terminal-title-classification-memo'
-import { getPiStateTitleStatus } from '../../shared/pi-state-title-marker'
 import { detectAgentStatusFromTitle, type AgentStatus } from '../../shared/agent-detection'
 import type { RuntimeTerminalWaitBlockedReason } from '../../shared/runtime-types'
 import type { TuiAgent } from '../../shared/tui-agent'
@@ -12,6 +11,7 @@ import {
 } from './agent-state-rules/agent-state-rules-engine'
 import { findPromptAnchorIndexes } from './agent-state-rules/agent-state-text-anchors'
 import { showsIdleTitleAnchor } from './agent-state-rules/agent-state-title-anchors'
+import { compiledFromActiveAgentStateRules } from './agent-state-rules/active-agent-state-rules'
 import {
   findTerminalWaitBlockedSignal,
   isSettledAfter,
@@ -24,21 +24,24 @@ const EXPLICIT_IDLE_TITLE_RE = /(^|\s)(ready|idle|done)(\s|$|[.!?])/i
 function computeExplicitIdleStatusFromTitle(title: string): AgentStatus | null {
   const status = detectAgentStatusFromTitle(title)
   // Why: launch titles like "Codex YOLO" contain an agent name but aren't readiness signals; terminal.wait needs explicit idle evidence.
-  return status === 'idle' &&
-    (EXPLICIT_IDLE_TITLE_RE.test(title) ||
-      showsIdleTitleAnchor(title) ||
-      getPiStateTitleStatus(title) === 'idle')
+  return status === 'idle' && (EXPLICIT_IDLE_TITLE_RE.test(title) || showsIdleTitleAnchor(title))
     ? 'idle'
     : null
 }
 
 /**
- * Pure in `title`, so it is memoized on the title string like the status classifier it
- * wraps: the wait path re-asks for the same unchanged title on every poll tick and every
- * repaint frame, and the marker scan below is a regex sweep each time (~72ns vs ~7ns).
+ * Pure in `title` for one rule set, so it is memoized on the title string like the status
+ * classifier it wraps: the wait path re-asks for the same unchanged title on every poll tick and
+ * every repaint frame, and the marker scan below is a regex sweep each time (~72ns vs ~7ns). Why a
+ * fresh memo per rule set: a rules reload can change which titles read as idle.
  */
-export const detectExplicitIdleStatusFromTitle: (title: string) => AgentStatus | null =
+const explicitIdleTitleMemo = compiledFromActiveAgentStateRules(() =>
   memoizeTitleClassification(computeExplicitIdleStatusFromTitle)
+)
+
+export function detectExplicitIdleStatusFromTitle(title: string): AgentStatus | null {
+  return explicitIdleTitleMemo()(title)
+}
 
 export function isKnownReadyPromptPreview(preview: string): boolean {
   const normalized = preview.toLowerCase()
@@ -70,7 +73,7 @@ export function isKnownReadyPromptBody(
   readScreenLines: () => readonly string[] | null,
   hasOutputClock: boolean
 ): boolean {
-  if (agent === 'qoder') {
+  if (agent === 'qoder' || agent === 'qoder-cn') {
     return isQoderComposerReady(readScreenLines())
   }
   // Why before the rules: such an agent settles only on the quiet lane while it has a clock.

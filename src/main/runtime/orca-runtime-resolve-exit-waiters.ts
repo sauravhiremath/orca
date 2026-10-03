@@ -9,16 +9,10 @@ import {
   buildTerminalWaitResult
 } from './terminal-wait-results'
 import type { AgentStatus } from '../../shared/agent-detection'
-import { getPiStateTitleStatus } from '../../shared/pi-state-title-marker'
 import { detectExplicitIdleStatusFromTitle } from './terminal-wait-detection'
 import { buildTerminalWaitText } from './terminal-wait-tail-state'
-import {
-  evaluateTuiIdle,
-  isTuiIdleReadyVerdict,
-  leafTuiIdleEvidence,
-  ptyTuiIdleEvidence,
-  type TuiIdleVerdict
-} from './tui-idle-evidence'
+import { evaluateTuiIdle, isTuiIdleReadyVerdict, type TuiIdleVerdict } from './tui-idle-evidence'
+import { leafTuiIdleEvidence, ptyTuiIdleEvidence } from './tui-idle-evidence-source'
 import { TUI_IDLE_QUIESCENCE_MS } from './orca-runtime-postlude'
 
 export class OrcaRuntimeWithResolveExitWaiters extends OrcaRuntimeWithBindPtyIncarnationHandle {
@@ -219,10 +213,7 @@ export class OrcaRuntimeWithResolveExitWaiters extends OrcaRuntimeWithBindPtyInc
   }
 
   protected getAdoptedPtyExplicitIdleStatus(pty: RuntimePtyWorktreeRecord): AgentStatus | null {
-    const title = this.getAdoptedPtyTitle(pty)
-    if (title && pty.lastOscTitleStaleWorkingClear && getPiStateTitleStatus(title) === 'idle') {
-      return null
-    }
+    const title = pty.lastOscTitle ?? this.getAdoptedPtyTitle(pty)
     return title ? detectExplicitIdleStatusFromTitle(title) : null
   }
 

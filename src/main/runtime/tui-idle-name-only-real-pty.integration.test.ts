@@ -134,7 +134,7 @@ describe.skipIf(process.platform === 'win32')('tui-idle against a real agent pty
     expect(staleOutcome.satisfied).toBe(false)
     const genuineOutcome = await terminalWait(runtime, handle, 10_000)
     expect(genuineOutcome.satisfied).toBe(true)
-    expect(transcript.join('')).toContain('\x1b]0;π > project\x07')
+    expect(transcript.join('')).toContain('\x1b]0;π - project\x07')
   }, 20_000)
 
   it('satisfies once the real process goes quiet with the agent still in foreground', async () => {

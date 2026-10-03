@@ -74,7 +74,7 @@ describe('terminal side-effect fact channel', () => {
         condition: 'tui-idle',
         timeoutMs: 5_000
       })
-      runtime.onPtyData('pty-1', '\x1b]0;π > project\x07', Date.now())
+      runtime.onPtyData('pty-1', '\x1b]0;π - project\x07', Date.now())
       const readyAssertion = expect(genuineWait).resolves.toMatchObject({ satisfied: true })
       await vi.advanceTimersByTimeAsync(2_000)
       await readyAssertion
