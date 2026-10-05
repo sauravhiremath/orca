@@ -68,6 +68,12 @@ The managed extension sends OMP events to `/hook/omp` on the execution host.
 Native, WSL, SSH, and folder workspaces use the same mapping.
 No second reporter or reader-side rule is required.
 
+Tracked reports: [#22017](https://github.com/stablyai/orca/issues/22017)
+(completed OMP turns remain working) and
+[#24436](https://github.com/stablyai/orca/issues/24436)
+(a redraw removes live agent status). Related child-work and exit-notification
+behavior is reported in [#22854](https://github.com/stablyai/orca/issues/22854).
+
 - Startup and session switches send current activity. Readiness requires idle,
   no pending messages, and no active jobs. Missing activity does not prove readiness.
 - Idle readiness uses `done` with `sessionBoundary: true`. It is not turn completion.
