@@ -55,6 +55,7 @@ export function getOmpSessionOwnerHandlerSourceLines(): string[] {
     '    pi.on(name, (event, ctx) => {',
     '      if (!ownsSessionStatus(ctx)) return',
     '      installOmpUiTracking(ctx)',
+    '      lifecycleState.ownsPane = true',
     '      return handler(event, ctx)',
     '    })',
     '  }',

@@ -148,14 +148,23 @@ export function nameOnlyIdleNeedsCorroboration(
 export function hasSustainedTitleIdle(
   record: TuiIdleEvidenceRecord,
   agent: TuiAgent | null | undefined,
-  quiescenceMs: number
+  quiescenceMs: number,
+  launchReadiness = false
 ): boolean {
-  // A name-only title needs a measured quiet stream unless it is the agent's only rest signal.
-  return (
-    record.lastAgentStatus === 'idle' &&
-    (!nameOnlyIdleNeedsCorroboration(agent, record.lastOscTitle) ||
-      hasQuietOutput(record, quiescenceMs))
-  )
+  if (record.lastAgentStatus !== 'idle') {
+    return false
+  }
+  // Why launch readiness always corroborates: a shell auto-title (`grok`, `gemini`) names the
+  // agent before its TUI mounts, and a paste then lands in a booting TUI or the shell itself.
+  if (!launchReadiness && !nameOnlyIdleNeedsCorroboration(agent, record.lastOscTitle)) {
+    // The title is the only rest signal this agent emits, so there is nothing to wait for.
+    return true
+  }
+  // Why not "no timestamp means nothing to debounce": an adopted or daemon-backed pane has
+  // no local output clock, so for an agent that WILL announce rest explicitly there is no
+  // corroboration available at all. Settling here let a busy Codex/Devin satisfy the wait
+  // from a name-only title (#6011); hold out for tier 1/2 or the caller's timeout instead.
+  return hasQuietOutput(record, quiescenceMs)
 }
 
 /** Why a missing clock is not quiet: an adopted or restored pane cannot measure it. */
@@ -208,6 +217,9 @@ export type TuiIdleEvaluationInput = {
   /** Tier 0: the hook server's fresh row for the pane, read only for an authoritative agent. */
   readHookTurn?: () => TuiIdleHookTurn | null
   quiescenceMs: number
+  /** Waiting for a just-launched agent to open its composer, where a name-only title proves
+   *  nothing until the stream goes quiet. */
+  launchReadiness?: boolean
 }
 
 export type TuiIdleVerdict =
@@ -332,11 +344,11 @@ function rankTuiIdleEvidence(input: TuiIdleEvaluationInput): TuiIdleVerdict {
   // refused, and an agent's own idle-title rule replaces the sustained-title lane below.
   const ruled = input.readAgentRuleVerdict()
   if (ruled !== null) {
-    return isSettledWeakIdle(ruled, input.record, input.quiescenceMs)
+    return isSettledWeakIdle(ruled, input.record, input.quiescenceMs, input.launchReadiness)
       ? READY_WEAK
       : { kind: 'pending', quietForeground: 'closed' }
   }
-  if (hasSustainedTitleIdle(input.record, input.agent, input.quiescenceMs)) {
+  if (hasSustainedTitleIdle(input.record, input.agent, input.quiescenceMs, input.launchReadiness)) {
     return READY_WEAK
   }
   return {
@@ -348,15 +360,18 @@ function rankTuiIdleEvidence(input: TuiIdleEvaluationInput): TuiIdleVerdict {
   }
 }
 
+// Why launch readiness asks quiet of every weak idle: those rules read a name-only title, which a
+// shell auto-title writes before the TUI mounts, as in the sustained-title lane.
 function isSettledWeakIdle(
   verdict: AgentStateVerdict,
   record: TuiIdleEvidenceRecord,
-  quiescenceMs: number
+  quiescenceMs: number,
+  launchReadiness = false
 ): boolean {
   return (
     verdict.state === 'idle' &&
     verdict.strength === 'weak' &&
-    (!verdict.requiresQuiet || hasQuietOutput(record, quiescenceMs))
+    ((!verdict.requiresQuiet && !launchReadiness) || hasQuietOutput(record, quiescenceMs))
   )
 }
 

@@ -26,11 +26,11 @@ the structured-session mapping and nothing else.
 An audit on 2026-09-09 found six producers and three consumers, and three
 separate copies of the same row inside the main process alone:
 
-| Main-process copy                 | Keyed by  | Owned by                                                                          | Persisted          | Evicted                      |
-| --------------------------------- | --------- | --------------------------------------------------------------------------------- | ------------------ | ---------------------------- |
-| hook server `lastStatusByPaneKey` | paneKey   | `src/main/agent-hooks/server.ts`                                                  | `last-status.json` | tab close, pty exit, hydrate |
-| runtime `RuntimeAgentRowStore`    | paneKey   | `runtime-agent-row-store.ts` (deleted in PR 1b)                                   | no                 | pty exit only                |
-| structured feed `published`       | sessionId | `src/main/native-chat/agent-session-wire/structured-agent-session-status-feed.ts` | no                 | never (a broadcast cache)    |
+| Main-process copy                 | Keyed by  | Owned by                                                                          | Persisted          | Evicted                                        |
+| --------------------------------- | --------- | --------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------- |
+| hook server `lastStatusByPaneKey` | paneKey   | `src/main/agent-hooks/server.ts`                                                  | `last-status.json` | tab close, pty exit, hydrate, worktree removal |
+| runtime `RuntimeAgentRowStore`    | paneKey   | `runtime-agent-row-store.ts` (deleted in PR 1b)                                   | no                 | pty exit only                                  |
+| structured feed `published`       | sessionId | `src/main/native-chat/agent-session-wire/structured-agent-session-status-feed.ts` | no                 | never (a broadcast cache)                      |
 
 The second copy is a duplicate write: the OSC status parsed in main is
 forwarded to the hook server _and_ retained in the runtime store from the same
@@ -66,71 +66,49 @@ Three consequences:
 The managed extension sends OMP events to `/hook/omp` on the execution host.
 `normalizePiCompatibleEvent` maps them into the existing hook status store.
 Native, WSL, SSH, and folder workspaces use the same mapping.
-No second reporter or reader-side rule is required.
 
-Tracked reports: [#22017](https://github.com/stablyai/orca/issues/22017)
-(completed OMP turns remain working) and
-[#24436](https://github.com/stablyai/orca/issues/24436)
-(a redraw removes live agent status). Related child-work and exit-notification
-behavior is reported in [#22854](https://github.com/stablyai/orca/issues/22854).
+### Readiness and turn completion
 
-- Startup and session switches send current activity. Readiness requires idle,
+- Startup and session switches report current activity. Readiness requires idle,
   no pending messages, and no active jobs. Missing activity does not prove readiness.
-- Idle readiness uses `done` with `sessionBoundary: true`. It is not turn completion.
-  This also applies after a completed turn: retry, compaction, dialog close, and
-  approval resolution keep the prior main-agent outcome without another completion.
-  Native chat keeps the completed main-agent duration when its host turn stamp
-  remains present; a readiness-only row without that clock has no turn duration.
-- Retry and compaction start as `working`. Their end can restore readiness only
-  when current activity is clear and no continuation flag is true.
-- Real UI dialogs use `waiting`; tool approvals use `blocked`. Closing a dialog
-  restores current activity. Nested dialogs, reloads, and stale closes are tracked.
-- `agent_end` with `willContinue: true` does not complete a turn. Owned jobs,
-  children, and pending messages keep the combined row `working` after the main
-  agent completes. The final all-clear keeps the main-agent outcome and its clock.
-- OMP keeps checking owned jobs and pending messages after `agent_settled` until
-  they clear. Pi still uses `agent_settled` instead of its idle fallback check.
-- The last assistant stop reason maps `stop` to `success`, `error` to `failure`,
-  and `aborted` to `cancellation`. Other reasons have no outcome. Normal provider
-  completion does not prove that the user's task succeeded.
-- Shutdown clears local timers and dialog tracking without a completion event.
-  Missing hooks or transport loss never prove process exit. Process verdicts
-  remain `live`, `unverifiable`, and `exited`.
-- OMP redraws can emit `OSC 133;D` while its process still runs. Neither parsed
-  bytes nor daemon command-finished facts retire launch authority on their own.
-  Retirement requires a shell confirmed by the current execution host. Unknown,
-  failed, and non-shell foreground reads keep the row and admit later hooks.
-  Pending reads must still match the controller, PTY incarnation, lifecycle,
-  launch identity, restored inventory receipt, and host hook observations.
-  A new session, turn, or observation revision cancels an older shell response,
-  including activity with the same state and timestamp. Actual PTY exit keeps
-  its existing retirement rules.
-- A command-finished marker ends token-only startup takeover permission before
-  the foreground read starts. Unknown, failed, and non-shell reads still retain
-  status and the launch token, but takeover requires matching host hook
-  attestation afterward. Registering the same launch does not restore startup
-  permission. Admitting a fresh launch token restores the startup exception.
-- Renderer command-finished cleanup also requires a confirmed shell for a known
-  agent. An unanswered or failed read cancels pending cleanup without dropping the
-  status or launch record, even when the host has no checkable process identity.
-  A known `done` hook row still requires confirmation: turn completion is not
-  process exit. Repeated command-finished markers do not change this rule.
-- Parked SSH command-finished markers do not drop hook status or launch records.
-  They carry no execution-host process-exit proof. Host-proved process exit and
-  explicit user dismissal keep their existing cleanup rules.
-- Timer-cleared working titles affect display only. Readiness and message delivery
-  use the agent's own title, including after graph rebuilds and hydration.
-- A fresh working hook prevents a retained prompt from proving readiness.
-- For Pi and OMP, a fresh authoritative hook turn takes priority over title and
-  screen evidence. OMP's native idle state title requires the title-age window
-  and a trustworthy screen outside the alternate-screen overlay. Startup hook
-  rows do not establish a completed turn or replace these screen checks.
-- Selected-target sends recognize current Pi and OMP idle state markers,
-  including wrapped titles, and keep support for the legacy idle title.
+- Readiness uses `done` with `sessionBoundary: true`, not a completed turn.
+  Retry, compaction, dialog close, and approval resolution preserve an existing
+  main-agent outcome. Native chat preserves its duration while the host turn stamp remains.
+- Retry and compaction remain `working` until activity clears and no continuation
+  flag is true. UI dialogs use `waiting`; tool approvals use `blocked`.
+  Nested dialogs and late closes from a replaced session cannot restore readiness.
+- `agent_end` with `willContinue: true` does not complete a turn. Children, owned
+  jobs, and pending messages keep the combined row `working` after the main agent
+  completes. OMP checks pending work after `agent_settled`; the final all-clear
+  preserves the main-agent outcome and clock. Pi retains its own settlement rules.
+- Assistant stop reasons map `stop` to `success`, `error` to `failure`, and `aborted`
+  to `cancellation`. Other reasons have no outcome. This reports provider completion,
+  not proof that the user's task succeeded.
+- A new session or branch closes the old run without a completion notification.
+  Fork and resume retain children that still run. Child extensions cannot replace
+  the root session's status. Shutdown clears timers and dialogs without completion.
 
-Activity and outcome fields are optional payload fields. Existing remote clients
-do not need a new wire opcode. A source change does not update an installed app
-or its managed extension until that source is built and deployed.
+### Process lifetime
+
+OMP redraws can emit `OSC 133;D` while its process still runs. Command-finished
+bytes and daemon facts alone cannot remove status or launch authority. The current
+execution host must confirm a shell. Missing, failed, or non-shell foreground reads
+retain both, including a `done` row: turn completion is not process exit.
+
+A pending shell read must still match the controller, PTY incarnation, lifecycle,
+launch identity, restored inventory receipt, and host hook observation. New evidence
+cancels an older read, even when state and timestamp match. Command-finished also
+ends token-only startup takeover permission; later takeover requires matching host
+hook attestation. Only a fresh launch token restores the startup exception.
+
+Renderer and parked SSH cleanup follow the same execution-host boundary. Actual
+PTY exit and explicit dismissal retain their cleanup paths. Transport loss never
+proves exit; process verdicts remain `live`, `unverifiable`, and `exited`.
+
+Readiness follows [Readiness reads the store](#readiness-reads-the-store).
+Selected-target sends also accept current Pi/OMP idle markers and legacy idle titles.
+Activity and outcome fields are optional; no new wire opcode is required. Installed
+apps and managed extensions must be updated before a source change takes effect.
 
 ## The store already exists
 
@@ -503,6 +481,7 @@ writers:
 | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Command Code output seeds, parked-pane seeds, pty-exit removal    | delete; main already emits the same facts                                                                |
 | structured bridge status writes                                   | delete; main now publishes the row                                                                       |
+| structured bridge failed-start row (the host refused the create)  | keep; a refused create leaves the host no session, so the bridge writes it from the launch record        |
 | launch placeholder seeds (a user launched an agent with a prompt) | keep for now; main holds the launch config and can seed later                                            |
 | dismissal, acknowledgement, unmount                               | keep; user facts and component lifecycle                                                                 |
 | remote-runtime OSC parse (bytes never transit local main)         | keep, fenced behind the host's published row once the host is new enough; rule 3 of the wire doc applies |

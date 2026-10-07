@@ -16,6 +16,7 @@ import type { ProjectExecutionRuntimeResolution } from '../../shared/project-exe
 import { resolveLocalProjectRuntimeForWorktreeId } from '../local-project-runtime-resolution'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import {
+  localOrchestrationCliCommand,
   resolveTerminalOrchestrationCliCommand,
   runtimeOrchestrationCliCommand,
   type OrchestrationCliCommand
@@ -23,6 +24,8 @@ import {
 import type { FleetAgentStatusEvidence } from '../../shared/orchestration-fleet-agent-status-evidence'
 import { readOrchestrationFleetAgentStatusSnapshot } from './orchestration-fleet-agent-status-snapshot'
 import { resolveStructuredWorkerAuthority } from './structured-worker-authority'
+import { isStructuredWorkerHandle } from './structured-worker-identity'
+import { parseOrcaSessionAddress } from '../../shared/orca-session-address'
 import { matchesProcessIncarnation } from './orchestration/worker-terminal-process-liveness'
 import { captureAgentHookRetirementFence } from './runtime-agent-hook-retirement-fence'
 
@@ -134,12 +137,10 @@ export class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends OrcaRuntim
     }
     pty.launchNeedsHookAttestation = true
     const receipt = this.restoredOrchestrationAuthorityByPtyId.get(ptyId)
-    const launchToken = pty.launchToken
-    const launchAgent = pty.launchAgent
+    const { launchToken, launchAgent, incarnationId } = pty
     if (!launchToken && !receipt && !launchAgent) {
       return
     }
-    const incarnationId = pty.incarnationId
     const generation = this.getPtyLifecycleGeneration(ptyId)
     const hookObservationsUnchanged = captureAgentHookRetirementFence(
       this.collectPaneKeysForPty(ptyId),
@@ -298,6 +299,10 @@ export class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends OrcaRuntim
   }
 
   getTerminalOrchestrationCliCommand(handle: string): OrchestrationCliCommand {
+    // A structured session runs in this process: it is told what the structured mail lane types.
+    if (isStructuredWorkerHandle(handle) || parseOrcaSessionAddress(handle)) {
+      return localOrchestrationCliCommand()
+    }
     let pty: RuntimePtyWorktreeRecord | null = null
     try {
       const ptyId = this.resolveLeafForHandle(handle)?.ptyId

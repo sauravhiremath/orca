@@ -89,19 +89,6 @@ function installOmpUiTracking(ctx): void {
 
 export function getOmpStatusLifecycleHandlerSourceLines(): string[] {
   return [
-    "  onStatus('session_switch', (_event, ctx) => {",
-    '    if (!isOmpRuntime()) return',
-    '    lifecycleState.active.clear()',
-    '    lifecycleState.exited?.clear()',
-    '    lifecycleState.waiting = false',
-    '    resetPostQueue()',
-    '    clearPendingAgentEndCheck()',
-    '    ompCompletionExtra = {}',
-    '    ompCompletionContext = null',
-    '    invalidateOmpUiDialogs()',
-    '    updateRuntimeOmpSessionMetadata(ctx)',
-    "    post('session_switch', readOmpActivity(ctx))",
-    '  })',
     "  for (const name of ['auto_retry_start', 'auto_retry_end', 'auto_compaction_start', 'auto_compaction_end', 'retry_fallback_applied', 'retry_fallback_succeeded']) {",
     '    onStatus(name, (event, ctx) => {',
     '      if (!isOmpRuntime()) return',
